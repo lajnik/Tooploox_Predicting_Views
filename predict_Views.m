@@ -33,7 +33,7 @@ stdVn =  std(v168);
 % Variance
 varVn = stdVn^2;
 
-% Distribution of v(168)
+%% Distribution of v(168)
 figure(1);
 normplot(v168);
 figure(2);
@@ -47,7 +47,7 @@ normplot(v168Log);
 figure(4);
 histfit(v168Log);
 grid on;
-% Conclusion: distribution of data is log-normal distribution
+% Conclusion: distribution of data is log-normal 
 
 %% Removing outliers
 
@@ -62,28 +62,24 @@ for i=1:noColumns
 end
 
 %% Correlation coefficients
-[noRowsWO,noColumnsWO] = size(Cwo);
-vN = Cwo(1:noRowsWO,noColumnsWO);
-vNlog = log(vN);
-n=24;
 
+% remove zeros to avoid nans (log0 = -inf)
+[r c] = find(Cwo==0);
+for i=1:size(r,1)
+    Cwo(r(i),1) = 0.0000000000000001;
+end
+
+[noRowsWO,noColumnsWO] = size(Cwo);
+CwoLog = log(Cwo);
+n=24;
 corrCoefficients = zeros(1,n);
 
 for i=1:n
-    vTemp = Cwo(1:noRowsWO,i);
-    vTempLog = log(vTemp);
-    corrCoefficients(i) = corr(vTemp,vNlog);
+    vTemp = CwoLog(1:noRowsWO,i);
+    corrCoefficients(i) = corr(vTemp,CwoLog(1:noRowsWO,168));
 end
 
 %% Spliting dataset randomly
-
-[r c] = find(Cwo==0);
-for i=1:size(r,1)
-    Cwo(r(i),1) = 0.1;
-end
-
-CwoLog = log(Cwo);
-
 trainingSet = CwoLog;
 l = round(0.1*noRowsWO);
 r = randperm(noRowsWO,l);
@@ -100,17 +96,14 @@ y = trainingSet(:,168); %traing set
 
 for i = 1:167
     x = trainingSet(:,i);
-    H = [ones(length(y),1),x];
-    AstarVal = inv(H'*H)*H'*y;
-    Astar(1,i)=AstarVal(1,1);
-    Astar(2,i)=AstarVal(2,1);
+    X = [ones(length(y),1),x];
+    betaVal = X\y;
+%     b = regress(y,H) 
+%     bp(1,i)=b(1,1);
+%     bp(2,i)=b(2,1);
+    beta(1,i)=betaVal(1,1);
+    beta(2,i)=betaVal(2,1);
 end;
-
-Ytilde = H*Astar(:,167);
-figure(5);
-scatter(x,y);
-hold on;
-plot(x,Ytilde);
 
 % scatter(x,y);
 % hold on;
@@ -119,84 +112,85 @@ plot(x,Ytilde);
  
 %% Multiple regression model
 
-AstarMulti = zeros(168);
-
+betaMulti = zeros(168,167);
 for i=1:167
     noInputs = i;
     x = trainingSet(:,1:noInputs);
 
-    H = [ones(length(y),1),x];
-    AstarMultiVal = inv(H'*H)*H'*y;
-    for n =1:noInputs+1
-        AstarMulti(n,i)=AstarMultiVal(n,1);
+    X = [ones(length(y),1),x];
+    betaMultiVal = X\y;
+    for n = 1:noInputs+1
+        betaMulti(n,i) = betaMultiVal(n,1);
     end
-   
 end
 
 %% Relative squared error
-
 T = size(testSet,1);
 
+hour = 16;
 %prediction of views in 16th hour
-x = testSet(:,16); 
-H = [ones(length(x),1),x];
+x = testSet(:,hour); 
+X = [ones(length(x),1),x];
 
-Ytilde = H*Astar;
+Yest = X*beta(:,16);
 Yreal = testSet(:,168); 
 
 mSRE = 0;
 for i = 1:T
-    mSRE = mSRE + (Ytilde(i)/Yreal(i) - 1)^2;
+    mSRE = mSRE + (Yest(i)/Yreal(i) - 1)^2;
 end
-mSRE = mSRE/T;
+mSRE1 = mSRE/T;
 
 %% Plotting mSREs
-% Single input
+%% Single input
 
-noHours = 24
+noHours = 24;
+mRSESingle = zeros(1,noHours);
+
 for n=1:noHours
     x = testSet(:,n); 
-    H = [ones(length(x),1),x];
+    X = [ones(length(x),1),x];
 
-    AstarTemp = Astar(1:2, n);
-    Ytilde = H*AstarTemp;
+    betaTemp = beta(:, n);
+    Yest = X*betaTemp;
     Yreal = testSet(:,n); 
 
     mRSE = 0;
     for i = 1:T
-        mRSE = mRSE + (Ytilde(i)/Yreal(i) - 1)^2;
+        mRSE = mRSE + (Yest(i)/Yreal(i) - 1)^2;
     end
     mRSE = mRSE/T;
     mRSESingle(n) = mRSE;
 end
 
-figure(9);
+figure(5);
 hours = 1:1:noHours;
-plot( hours, mRSESingle, 'b*-');
+plot( hours, mRSESingle, 'r*-');
+xlabel('hours[h]') % x-axis label
+ylabel('mRSE') % y-axis label
 grid on;
 hold on;
 
-% Multiple input
+%% Multiple input
 
+mRSEMulti = zeros(1,noHours);
 for n=1:noHours
     noInputs = n;
     x = testSet(:,1:noInputs);
 
-    H = [ones(length(x),1),x];
-    AstarTemp = AstarMulti(1:n+1,n);
+    X = [ones(length(x),1),x];
+    betaTemp = betaMulti(1:n+1,n);
     
-    Ytilde = H*AstarTemp;
+    Yest = X*betaTemp;
     Yreal = testSet(:,n); 
 
-    mRSE = 0
+    mRSE = 0;
     for i = 1:T
-        mRSE = mRSE + (Ytilde(i)/Yreal(i) - 1)^2;
+        mRSE = mRSE + (Yest(i)/Yreal(i) - 1)^2;
     end
-    mRSE = mRSE/T
+    mRSE = mRSE/T;
     mRSEMulti(n) = mRSE;
 end
 
-plot(hours, mRSEMulti, 'r*-');
- 
- 
- 
+plot(hours, mRSEMulti, 'b.-');
+legend('Single-input linear regression','Multiple-input linear regression');
